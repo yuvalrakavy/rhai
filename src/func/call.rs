@@ -384,6 +384,12 @@ impl Engine {
                 backup.change_first_arg_to_copy(args);
             }
 
+            // Restore the first argument on every exit, an unwind included. Restoring only on the
+            // normal path left the backup unrestored when the native function panicked, and its
+            // `Drop` assertion then panicked during the unwind, aborting the process. This is the
+            // same guard the script-function path uses.
+            defer! { args = (args) if swap => move |a| backup.restore_first_arg(a) }
+
             #[cfg(feature = "debugging")]
             if self.is_debugger_registered() {
                 let source = source.clone().or_else(|| global.source.clone());
@@ -411,10 +417,6 @@ impl Engine {
             }
             .and_then(|r| self.check_data_size(r, pos))
             .map_err(|err| err.fill_position(pos));
-
-            if swap {
-                backup.restore_first_arg(args);
-            }
 
             #[cfg(feature = "debugging")]
             if self.is_debugger_registered() {
